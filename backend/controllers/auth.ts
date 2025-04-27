@@ -4,6 +4,7 @@ import { ApiError } from "../utils/api-error";
 import { ApiResponse } from "../utils/api-response";
 import { randomBytes } from "crypto";
 import { sendEmail, emailVerificationMailgenContent } from "../utils/mail";
+import jwt from "jsonwebtoken";
 
 const prisma = new PrismaClient();
 
@@ -39,7 +40,7 @@ export const registerUser = asyncHandler(async (req, res) => {
     },
   });
 
-  const verificationUrl = `${process.env.CLIENT_URL}/api/v1/auth/verify-email?token=${verificationToken}`;
+  const verificationUrl = `${process.env.BASE_URL}/api/v1/auth/verify-email?token=${verificationToken}`;
 
   await sendEmail({
     email: user.email,
@@ -67,7 +68,6 @@ export const registerUser = asyncHandler(async (req, res) => {
     );
 });
 
-// controllers/auth.ts
 export const verifyEmail = asyncHandler(async (req, res) => {
   const { token } = req.query;
 
@@ -104,4 +104,65 @@ export const verifyEmail = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .json(new ApiResponse(200, sanitizedUser, "Email verified"));
+});
+
+export const login = asyncHandler(async (req, res) => {
+  const { email, password } = req.body;
+
+  // Validation
+  if (!email || !password) {
+    throw new ApiError(400, "Email and password are required");
+  }
+
+  // Check user existence
+  const user = await prisma.user.findUnique({
+    where: { email },
+  });
+
+  if (!user) {
+    throw new ApiError(401, "Invalid credentials");
+  }
+
+  // Verify password
+  const isPasswordValid = await Bun.password.verify(password, user.password);
+  if (!isPasswordValid) {
+    throw new ApiError(401, "Invalid credentials");
+  }
+
+  // Check email verification status
+  if (!user.isVerified) {
+    throw new ApiError(403, "Please verify your email first");
+  }
+
+  // Generate JWT token
+  const token = jwt.sign(
+    {
+      id: user.id,
+      role: user.role,
+    },
+    process.env.JWT_SECRET!,
+    { expiresIn: "24h" },
+  );
+
+  // Sanitize user data
+  const sanitizedUser = {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    isVerified: user.isVerified,
+  };
+
+  // Set cookie and send response
+  res
+    .status(200)
+    .cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    })
+    .json(
+      new ApiResponse(200, { user: sanitizedUser, token }, "Login successful"),
+    );
 });
