@@ -4,6 +4,7 @@ import cors from "cors";
 
 import authRouter from "./routes/auth";
 import { errorHandler } from "./middlewares/error-handler";
+import postRouter from "./routes/post";
 
 const app = express();
 const port = process.env.PORT ?? 8000;
@@ -25,6 +26,7 @@ app.get("/", (req, res) => {
 });
 
 app.use("/api/v1/auth", authRouter);
+app.use("/api/v1/post", postRouter);
 app.use(errorHandler as ErrorRequestHandler);
 
 app.listen(port, () => {
