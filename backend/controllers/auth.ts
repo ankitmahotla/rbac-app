@@ -36,7 +36,6 @@ export const register = asyncHandler(async (req, res) => {
       verificationTokenExpiry: new Date(Date.now() + 24 * 60 * 60 * 1000),
     },
     select: {
-      // Added select here
       id: true,
       name: true,
       email: true,
@@ -46,7 +45,7 @@ export const register = asyncHandler(async (req, res) => {
     },
   });
 
-  const verificationUrl = `${process.env.BASE_URL}/api/v1/auth/verify-email?token=${user.verificationToken}`;
+  const verificationUrl = `${process.env.CLIENT_URL}/verify-email?token=${user.verificationToken}`;
 
   await sendEmail({
     email: user.email,
@@ -77,7 +76,6 @@ export const verifyEmail = asyncHandler(async (req, res) => {
       verificationTokenExpiry: { gt: new Date() },
     },
     select: {
-      // Added select here
       id: true,
       name: true,
       email: true,
@@ -154,8 +152,8 @@ export const login = asyncHandler(async (req, res) => {
     .status(200)
     .cookie("token", token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
+      secure: true,
+      sameSite: "none",
       maxAge: 24 * 60 * 60 * 1000,
     })
     .json(
@@ -194,8 +192,8 @@ export const logout = asyncHandler(async (req, res) => {
     .status(200)
     .clearCookie("token", {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
+      secure: true,
+      sameSite: "none",
     })
     .json(new ApiResponse(200, null, "Logged out successfully"));
 });
