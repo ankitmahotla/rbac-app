@@ -33,7 +33,7 @@ export const useSessionStore = create<SessionState>()(
     }),
     {
       name: "session-storage",
-      storage: createJSONStorage(() => sessionStorage),
+      storage: createJSONStorage(() => localStorage),
       // Add hydration listener
       onRehydrateStorage: () => (state) => {
         console.log("Hydration complete", state?.session);

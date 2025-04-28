@@ -1,17 +1,21 @@
 "use client";
-import { Button } from "@/components/ui/button";
+
+import { useState, useEffect } from "react";
 import { useProtectedSession } from "../hooks/useProtectedSession";
 import { toast } from "sonner";
 import { useSessionStore } from "@/store/auth";
 import { useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { CreateBlog } from "@/components/dialogs/create-blog";
+import { DeleteBlog } from "@/components/dialogs/delete-blog";
 
-// Mock blog data type
 interface Blog {
   id: string;
   title: string;
   content: string;
-  author: string;
+  author: {
+    name: string;
+  };
 }
 
 export default function Home() {
@@ -21,8 +25,10 @@ export default function Home() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [blogs, setBlogs] = useState<Blog[]>([]);
   const [loadingBlogs, setLoadingBlogs] = useState(true);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [blogToDelete, setBlogToDelete] = useState<string | null>(null);
 
-  // Fetch blogs on mount
   useEffect(() => {
     const fetchBlogs = async () => {
       try {
@@ -30,9 +36,10 @@ export default function Home() {
           credentials: "include",
         });
         const data = await response.json();
-        console.log(data);
         if (response.ok) {
-          setBlogs(data.blogs);
+          setBlogs(data.data);
+        } else {
+          toast.error(data.message || "Failed to load blogs");
         }
       } catch (error) {
         console.error("Failed to fetch blogs:", error);
@@ -70,20 +77,46 @@ export default function Home() {
     }
   };
 
-  const handleCreateBlog = () => {
-    router.push("/blogs/create");
+  const handleCreateBlog = async (newPost: {
+    title: string;
+    content: string;
+  }) => {
+    try {
+      const response = await fetch("http://localhost:8000/api/v1/post/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(newPost),
+        credentials: "include",
+      });
+
+      const data = await response.json();
+      if (!response.ok)
+        throw new Error(data.message || "Failed to create blog");
+
+      setBlogs((prev) => [data.data, ...prev]);
+      toast.success("Blog created successfully");
+      return true;
+    } catch (error) {
+      console.error("Create blog error:", error);
+      toast.error(
+        error instanceof Error ? error.message : "Failed to create blog",
+      );
+      return false;
+    }
   };
 
   const handleDeleteBlog = async (blogId: string) => {
     try {
       const response = await fetch(
-        `http://localhost:8000/api/v1/blogs/${blogId}`,
+        `http://localhost:8000/api/v1/post/delete/${blogId}`,
         {
           method: "DELETE",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${sessionStorage.getItem("token")}`,
           },
+          credentials: "include",
         },
       );
 
@@ -93,8 +126,7 @@ export default function Home() {
       setBlogs(blogs.filter((blog) => blog.id !== blogId));
       toast.success("Blog deleted successfully");
     } catch (error) {
-      console.error("Delete error:", error);
-      toast.error(error instanceof Error ? error.message : "Delete failed");
+      throw error; // Propagate error to DeleteConfirmDialog
     }
   };
 
@@ -108,7 +140,7 @@ export default function Home() {
         <h1 className="text-2xl font-bold">Blog Dashboard</h1>
         <div className="space-x-4">
           {session.role === "admin" && (
-            <Button onClick={handleCreateBlog}>Create Blog</Button>
+            <Button onClick={() => setIsDialogOpen(true)}>Create Blog</Button>
           )}
           <Button
             onClick={handleLogout}
@@ -119,6 +151,19 @@ export default function Home() {
           </Button>
         </div>
       </div>
+
+      <CreateBlog
+        isDialogOpen={isDialogOpen}
+        setIsDialogOpen={setIsDialogOpen}
+        onCreate={handleCreateBlog}
+      />
+
+      <DeleteBlog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        blogId={blogToDelete}
+        onDeleteConfirm={handleDeleteBlog}
+      />
 
       {loadingBlogs ? (
         <div>Loading blogs...</div>
@@ -131,14 +176,17 @@ export default function Home() {
             >
               <h2 className="text-xl font-semibold mb-2">{blog.title}</h2>
               <p className="text-gray-600 mb-4 line-clamp-3">{blog.content}</p>
-              <p className="text-sm text-gray-500">By {blog.author}</p>
+              <p className="text-sm text-gray-500">By {blog.author.name}</p>
 
               {session.role === "admin" && (
                 <div className="mt-4 space-x-2">
                   <Button
                     size="sm"
                     variant="destructive"
-                    onClick={() => handleDeleteBlog(blog.id)}
+                    onClick={() => {
+                      setBlogToDelete(blog.id);
+                      setDeleteDialogOpen(true);
+                    }}
                   >
                     Delete
                   </Button>
